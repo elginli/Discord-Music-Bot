@@ -15,6 +15,8 @@ def run_bot():
 
     queues = {}
     voice_clients = {}
+    loop_state = {}
+    is_skipping = {}
     youtube_base_url = "https://www.youtube.com/"
     youtube_results_url = youtube_base_url + 'results?'
     youtube_watch_url = youtube_base_url + 'watch?v='
@@ -27,27 +29,16 @@ def run_bot():
     async def on_ready():
         print(f'{client.user} is now playing')
 
+    #plays next song
     async def play_next(ctx):
-
-        q = queues.get(ctx.guild.id, [])
-
-        if q:
-            link = q.pop(0) 
-            await play(ctx, link=link)
-            await ctx.send(f"Now playing: {link}")
+        if queues[ctx.guild.id]:  
+            next_song = queues[ctx.guild.id].pop(0)  
+            await play(ctx, next_song) 
+            await ctx.send(f"Now playing: {next_song}")
         else:
             await ctx.send("The queue is empty.")
 
-        
-        #if queues[ctx.guild.id] != []:
-        #    link = queues[ctx.guild.id].pop(0)
-        #    await play(ctx, link = link)
-        #    await ctx.send(f"Now playing: {link}")
-        #else:
-        #    await ctx.send("The queue is empty.")
-        #    await ctx.voice_client.disconnect()
-
-
+    #plays the song
     @client.command(name="play")
     async def play(ctx, link):
 
@@ -78,11 +69,28 @@ def run_bot():
             song = data['url']
             player = discord.FFmpegOpusAudio(song, **ffmpeg_options)
 
-            voice_clients[ctx.guild.id].play(player, after=lambda e: asyncio.run_coroutine_threadsafe(play_next(ctx), client.loop))
+            def after_playing(error):
+                if error:
+                    print(f'Playback error: {error}')
+
+                if ctx.guild.id in is_skipping:
+                    if is_skipping[ctx.guild.id]:
+                        del is_skipping[ctx.guild.id]  
+                        return  
+                    
+                if ctx.guild.id in loop_state and loop_state[ctx.guild.id]:
+                    asyncio.run_coroutine_threadsafe(play(ctx, link), client.loop)
+                else:
+                    asyncio.run_coroutine_threadsafe(play_next(ctx), client.loop)
+
+            voice_clients[ctx.guild.id].play(player, after=after_playing)
+
+            #voice_clients[ctx.guild.id].play(player, after=lambda e: asyncio.run_coroutine_threadsafe(play_next(ctx), client.loop))
 
         except Exception as e:
             print(e)
 
+    #pauses the song
     @client.command(name = "pause")
     async def pause(ctx):
         try:
@@ -90,6 +98,7 @@ def run_bot():
         except Exception as e:
             print(e)
 
+    #resumes the song
     @client.command(name = "resume")
     async def resume(ctx):
         try:
@@ -97,6 +106,7 @@ def run_bot():
         except Exception as e:
             print(e)
 
+    #makes the bot leave call
     @client.command(name = "leave")
     async def leave(ctx):
         try:
@@ -106,18 +116,20 @@ def run_bot():
         except Exception as e:
             print(e)
 
+    #skip to next song in queue
     @client.command(name = "skip")
     async def skip(ctx):
         try:
-            guild_id = ctx.guild.id
-            if guild_id in voice_clients and voice_clients[guild_id].is_playing():
-                voice_clients[guild_id].stop()
-           
-            await ctx.send("Skipped current track!")
+            if voice_clients[ctx.guild.id] and voice_clients[ctx.guild.id].is_playing():
+                is_skipping[ctx.guild.id] = True
+                voice_clients[ctx.guild.id].stop()
+            await ctx.send("Skipped current track!")  
             await play_next(ctx)
         except Exception as e:
             print(e)
+            await ctx.send("Error while trying to skip the track.")
 
+    #skip to a certain song in the queue
     @client.command(name = "skipto")
     async def skipto(ctx, index: int):
 
@@ -145,13 +157,18 @@ def run_bot():
             print(f"Error playing the song at index {index}: {e}")
             await ctx.send("Failed to play the selected song.")
 
+    #loops the current song, to unloop run it again
     @client.command(name = "loop")
     async def loop(ctx):
-        try:
-            loop = asyncio.get_event_loop()
-        except Exception as e:
-            await ctx.send("Failed to Loop!")
+        
+        if loop_state.get(ctx.guild.id, False):
+            loop_state[ctx.guild.id] = False
+            await ctx.send("Looping is now disabled.")
+        else:
+            loop_state[ctx.guild.id] = True 
+            await ctx.send("Looping is now enabled.")
 
+    #clears the queue
     @client.command(name = "clear")
     async def clear(ctx):
         if ctx.guild.id in queues:
@@ -160,6 +177,7 @@ def run_bot():
         else:
             await ctx.send("There is no queue to clear!")
 
+    #queues up the song
     @client.command(name = "queue")
     async def queue(ctx, url):
         if ctx.guild.id not in queues:
@@ -167,6 +185,7 @@ def run_bot():
         queues[ctx.guild.id].append(url)
         await ctx.send("Added to queue!")
 
+    #shows all songs in current queue
     @client.command(name="show")
     async def show(ctx):
         if ctx.guild.id in queues and queues[ctx.guild.id]:
