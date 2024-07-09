@@ -34,7 +34,7 @@ def run_bot():
         if queues[ctx.guild.id]:  
             next_song = queues[ctx.guild.id].pop(0)  
             await play(ctx, next_song) 
-            await ctx.send(f"Now playing: {next_song}")
+            #await ctx.send(f"Now playing: {next_song}")
         else:
             await ctx.send("The queue is empty.")
 
@@ -84,25 +84,27 @@ def run_bot():
                     asyncio.run_coroutine_threadsafe(play_next(ctx), client.loop)
 
             voice_clients[ctx.guild.id].play(player, after=after_playing)
-
+            await ctx.send(f"Now playing: {link}")
             #voice_clients[ctx.guild.id].play(player, after=lambda e: asyncio.run_coroutine_threadsafe(play_next(ctx), client.loop))
 
         except Exception as e:
             print(e)
 
     #pauses the song
-    @client.command(name = "pause")
+    @client.command(name = "p")
     async def pause(ctx):
         try:
             voice_clients[ctx.guild.id].pause()
+            await ctx.send("Song paused.")
         except Exception as e:
             print(e)
 
     #resumes the song
-    @client.command(name = "resume")
+    @client.command(name = "r")
     async def resume(ctx):
         try:
             voice_clients[ctx.guild.id].resume()
+            await ctx.send("Song resumed.")
         except Exception as e:
             print(e)
 
@@ -113,11 +115,12 @@ def run_bot():
             voice_clients[ctx.guild.id].stop()
             await voice_clients[ctx.guild.id].disconnect()
             del voice_clients[ctx.guild.id]
+            await ctx.send("Bot has left.")
         except Exception as e:
             print(e)
 
     #skip to next song in queue
-    @client.command(name = "skip")
+    @client.command(name = "s")
     async def skip(ctx):
         try:
             if voice_clients[ctx.guild.id] and voice_clients[ctx.guild.id].is_playing():
@@ -130,7 +133,7 @@ def run_bot():
             await ctx.send("Error while trying to skip the track.")
 
     #skip to a certain song in the queue
-    @client.command(name = "skipto")
+    @client.command(name = "st")
     async def skipto(ctx, index: int):
 
         guild_id = ctx.guild.id
@@ -147,7 +150,7 @@ def run_bot():
             print(e)
 
         next_song = queue.pop(index-1)
-        queues[guild_id] = queue[index - 1:]
+        queues[guild_id] = queue
 
         await ctx.send(f"Skipping to song number {index}!")
 
@@ -158,7 +161,7 @@ def run_bot():
             await ctx.send("Failed to play the selected song.")
 
     #loops the current song, to unloop run it again
-    @client.command(name = "loop")
+    @client.command(name = "l")
     async def loop(ctx):
         
         if loop_state.get(ctx.guild.id, False):
@@ -169,7 +172,7 @@ def run_bot():
             await ctx.send("Looping is now enabled.")
 
     #clears the queue
-    @client.command(name = "clear")
+    @client.command(name = "c")
     async def clear(ctx):
         if ctx.guild.id in queues:
             queues[ctx.guild.id].clear()
@@ -178,7 +181,7 @@ def run_bot():
             await ctx.send("There is no queue to clear!")
 
     #queues up the song
-    @client.command(name = "queue")
+    @client.command(name = "q")
     async def queue(ctx, url):
         if ctx.guild.id not in queues:
             queues[ctx.guild.id] = []
@@ -193,6 +196,21 @@ def run_bot():
             await ctx.send(f"Current Queue:\n{response}")
         else:
             await ctx.send("The queue is currently empty!")
+
+    #shows all commands
+    @client.command(name="h")
+    async def h(ctx):
+        await ctx.send("play: .play \n"
+                       "resume: .r \n"
+                       "pause: .p \n"
+                       "leave: .leave \n"
+                       "skip: .s \n"
+                       "skipto: .st \n"
+                       "loop: .l \n"
+                       "queue: .q \n"
+                       "clear: .c \n"
+                       "show: .show \n"
+                       "help: .h")
 
 
     client.run(TOKEN)
